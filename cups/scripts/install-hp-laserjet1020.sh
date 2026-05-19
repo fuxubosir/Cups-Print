@@ -55,6 +55,14 @@ FW_INSTALL_DIR="/usr/share/foo2zjs/firmware"
 PYPPD_ARCHIVE="/usr/share/cups/model/foo2zjs.ppd-compiled"
 PPD_INSTALL_DIR="/usr/share/cups/model/HP"
 PPD_INSTALL_NAME="HP-LaserJet_1020-foo2zjs-A4.ppd"
+# Trixie 起 printer-driver-foo2zjs-common 改成铺原始 PPD（不再 pyppd 打包），
+# 候选路径按优先级列出，找到第一个就用。
+PPD_SEARCH_DIRS=(
+    /usr/share/cups/model/foo2zjs
+    /usr/share/cups/model
+    /usr/share/ppd/foo2zjs
+    /usr/share/ppd
+)
 
 # ────────────────────────────────────────────────────────────────────
 # 下载 & 安装固件
@@ -75,24 +83,44 @@ echo "[hp-laserjet1020] installed firmware: ${FW_INSTALL_DIR}/${FW_FILENAME} ($(
 # ────────────────────────────────────────────────────────────────────
 # 派生 A4-default PPD（issue #48）
 # ────────────────────────────────────────────────────────────────────
-# foo2zjs 的 PPD 走 dh_pyppd 打包成单文件可执行 archive：
-#   /usr/share/cups/model/foo2zjs.ppd-compiled list  → 列出所有可用 PPD
-#   /usr/share/cups/model/foo2zjs.ppd-compiled cat <name>  → 抽出 PPD 内容
-# 见 https://github.com/OpenPrinting/pyppd 的 runner.cat 实现：
-# 输入会被规范化成 "0/<filename>"，所以传 "HP-LaserJet_1020.ppd" 即可。
+# foo2zjs 的 PPD 在不同 Debian 版本里有两种打包方式：
+#   ① 老版本（dh_pyppd）：/usr/share/cups/model/foo2zjs.ppd-compiled 单文件可执行
+#      archive；调用 `archive cat HP-LaserJet_1020.ppd` 抽内容。见
+#      https://github.com/OpenPrinting/pyppd 的 runner.cat 实现：
+#      输入会被规范化成 "0/<filename>"，所以传 "HP-LaserJet_1020.ppd" 即可。
+#   ② Trixie 起：直接铺到 /usr/share/cups/model/foo2zjs/HP-LaserJet_1020.ppd[.gz]
+#      或类似路径（见 PPD_SEARCH_DIRS）。
 #
 # 注意：HP-LaserJet_1020.ppd 是 foo2zjs 源码的文件名（PPD/HP-LaserJet_1020.ppd），
-# 不是 NickName。如果上游改了文件名，下面这步会拿到空内容并 fail-fast。
-
-if [ ! -x "${PYPPD_ARCHIVE}" ]; then
-    echo "[hp-laserjet1020] FATAL: foo2zjs pyppd archive not found at ${PYPPD_ARCHIVE}"
-    exit 1
-fi
+# 不是 NickName。两种打包方式如果都拿不到非空内容会立即 fail-fast。
 
 PPD_TMP="$(mktemp /tmp/hp1020-a4.ppd.XXXXXX)"
 trap 'rm -f "${PPD_TMP}"' EXIT
 
-"${PYPPD_ARCHIVE}" cat HP-LaserJet_1020.ppd > "${PPD_TMP}"
+if [ -x "${PYPPD_ARCHIVE}" ]; then
+    echo "[hp-laserjet1020] extracting HP-LaserJet_1020.ppd from pyppd archive ${PYPPD_ARCHIVE}"
+    "${PYPPD_ARCHIVE}" cat HP-LaserJet_1020.ppd > "${PPD_TMP}"
+else
+    PPD_SRC=""
+    for dir in "${PPD_SEARCH_DIRS[@]}"; do
+        for cand in "${dir}/HP-LaserJet_1020.ppd" "${dir}/HP-LaserJet_1020.ppd.gz"; do
+            if [ -f "${cand}" ]; then
+                PPD_SRC="${cand}"
+                break 2
+            fi
+        done
+    done
+    if [ -z "${PPD_SRC}" ]; then
+        echo "[hp-laserjet1020] FATAL: HP-LaserJet_1020.ppd not found in pyppd archive nor in ${PPD_SEARCH_DIRS[*]}"
+        exit 1
+    fi
+    echo "[hp-laserjet1020] using PPD source ${PPD_SRC}"
+    case "${PPD_SRC}" in
+        *.gz) zcat "${PPD_SRC}" > "${PPD_TMP}" ;;
+        *)    cat  "${PPD_SRC}" > "${PPD_TMP}" ;;
+    esac
+fi
+
 if [ ! -s "${PPD_TMP}" ]; then
     echo "[hp-laserjet1020] FATAL: extracted PPD is empty (foo2zjs upstream may have renamed HP-LaserJet_1020.ppd)"
     exit 1
