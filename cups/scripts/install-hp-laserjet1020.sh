@@ -9,13 +9,19 @@
 #
 # 本脚本负责：
 #   ① 从本仓库 GitHub Releases 镜像下载 sihp1020.dl 固件文件；
-#   ② 放置到 /usr/share/foo2zjs/firmware/ 目录（foo2zjs 标准固件路径）；
+#   ② 放置到 /lib/firmware/hp/ 目录——foo2zjs 上游 hplj1000 加载脚本写死的
+#      FWDIR；Debian 的 printer-driver-foo2zjs 包正是预留了空目录
+#      /usr/lib/firmware/hp/（merged-usr 下与 /lib/firmware/hp/ 等价）等用户填；
 #   ③ 从 foo2zjs.ppd-compiled 派生一份默认 A4 纸张的 PPD，安装到
 #      /usr/share/cups/model/HP/HP-LaserJet_1020-foo2zjs-A4.ppd（issue #48）。
 #
-# 固件上传到 USB 设备实际由 foo2xqx-wrapper 在每次打印时按需完成——
-# 容器内没有 udev，但 foo2xqx-wrapper 调用 foo2zjs 自带的 hotplug 逻辑
-# （检测 VID:PID = 03f0:2b17 的设备），把 sihp1020.dl 写入对应 USB 设备节点。
+# 固件上传到 USB 设备：物理机上由 udev 规则 /usr/lib/udev/rules.d/85-hplj10xx.rules
+# 触发同包的 /usr/lib/udev/hplj1020 脚本完成（该脚本通过 CUPS USB backend 把
+# 这里下好的 sihp1020.dl 写入打印机）。容器内没有 udev daemon、规则不会触发，
+# 因此 cups/entrypoint.sh 在启动 cupsd 之前会主动以 SUBSYSTEM=usb 调用一次
+# /usr/lib/udev/hplj1020——等价于"在容器里手动 trigger 一次 udev 事件"。
+# 这意味着本脚本下载的固件必须放在原生脚本期望的路径，否则原生脚本会因
+# "Missing firmware" 直接 return 1，等于没修复 issue #48。
 #
 # ────────────────────────────────────────────────────────────────────
 # 下载策略
@@ -50,7 +56,11 @@ set -eo pipefail
 # ────────────────────────────────────────────────────────────────────
 FW_FILENAME="sihp1020.dl"
 FW_MIRROR_URL="https://github.com/hanxi/cups-web/releases/download/cups-driver/${FW_FILENAME}"
-FW_INSTALL_DIR="/usr/share/foo2zjs/firmware"
+# foo2zjs 上游 hplj1000 脚本（PPD/HP-LaserJet_1020.ppd 配套的 hotplug loader，
+# 在 Debian 下被 dh_link 重命名为 /usr/lib/udev/hplj1020）写死 FWDIR=/lib/firmware/hp。
+# Debian 的 printer-driver-foo2zjs 包预留了空 /usr/lib/firmware/hp/（与 /lib/firmware/hp/
+# 在 merged-usr 下是同一个目录），就是等用户把固件放进来。固件目录不能改。
+FW_INSTALL_DIR="/lib/firmware/hp"
 
 PPD_INSTALL_DIR="/usr/share/cups/model/HP"
 PPD_INSTALL_NAME="HP-LaserJet_1020-foo2zjs-A4.ppd"

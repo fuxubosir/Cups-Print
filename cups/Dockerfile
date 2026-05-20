@@ -159,11 +159,13 @@ RUN /tmp/build-scripts/install-konica-bizhub.sh
 # ────────────────────────────────────────────────────────────────────
 # HP LaserJet 1020 / 1020 Plus 固件 + A4-default PPD 派生。
 # ────────────────────────────────────────────────────────────────────
-# issue #40。HP 1020 系列是 host-based 打印机，每次上电需由主机上传固件。
-# Debian 的 printer-driver-foo2zjs 已提供驱动过滤器，但固件文件因版权不含在
-# Debian 包内。脚本从本仓库 GitHub Releases 镜像下载固件并放到
-# /usr/share/foo2zjs/firmware/；固件上传由 foo2xqx-wrapper 在每次打印时按需
-# 完成（容器内没有 udev，但 wrapper 自带 hotplug 逻辑）。
+# issue #40 / #48。HP 1020 系列是 host-based 打印机，每次上电需由主机上传固件。
+# Debian 的 printer-driver-foo2zjs 已提供驱动过滤器 + /usr/lib/udev/hplj1020
+# 加载脚本 + 配套 udev 规则，但固件文件因版权不含在 Debian 包内（包里只留了
+# 空目录 /usr/lib/firmware/hp/ 等用户填）。本脚本从本仓库 GitHub Releases 镜像
+# 下载固件，写到 foo2zjs 上游 hplj1000 脚本约定的 /lib/firmware/hp/ 路径。
+# 物理机上 udev 规则会在打印机上电时自动触发 /usr/lib/udev/hplj1020 完成上传；
+# 容器里没有 udev daemon，由 cups/entrypoint.sh 手动调用同一个脚本兜底。
 # 全架构通用（固件是二进制 blob，与 CPU 架构无关）。
 #
 # issue #48。脚本同时从 foo2zjs.ppd-compiled 派生一份默认 A4 的 HP 1020 PPD，
