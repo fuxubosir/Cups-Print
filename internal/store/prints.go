@@ -29,6 +29,11 @@ type PrintFilter struct {
 	Limit    int
 }
 
+type PrintRecordPath struct {
+	ID         int64
+	StoredPath string
+}
+
 func InsertPrintRecord(ctx context.Context, tx *sql.Tx, rec *PrintRecord) (int64, error) {
 	res, err := tx.ExecContext(ctx, `INSERT INTO print_jobs (
 		user_id, printer_uri, filename, stored_path, pages,
@@ -63,6 +68,30 @@ func DeletePrintRecordsByUserID(ctx context.Context, tx *sql.Tx, userID int64) (
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+func ListPrintRecordPaths(ctx context.Context, tx *sql.Tx, userID *int64) ([]PrintRecordPath, error) {
+	query := "SELECT id, stored_path FROM print_jobs"
+	args := []interface{}{}
+	if userID != nil {
+		query += " WHERE user_id = ?"
+		args = append(args, *userID)
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var paths []PrintRecordPath
+	for rows.Next() {
+		var path PrintRecordPath
+		if err := rows.Scan(&path.ID, &path.StoredPath); err != nil {
+			return nil, err
+		}
+		paths = append(paths, path)
+	}
+	return paths, rows.Err()
 }
 
 func GetPrintRecordByID(ctx context.Context, tx *sql.Tx, id int64) (PrintRecord, error) {

@@ -90,6 +90,61 @@
       <div class="text-sm text-muted mt-2">自动清理会删除打印记录与文件，并压缩数据库。</div>
     </UCard>
 
+    <UCard>
+      <template #header>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <UIcon name="i-lucide-folder-search" class="w-5 h-5" />
+            上传文件管理
+          </h2>
+          <div class="flex flex-wrap gap-2">
+            <UButton variant="outline" icon="i-lucide-scan-search" :loading="scanningFiles" @click="loadUploadFiles">扫描文件</UButton>
+            <UButton
+              color="error"
+              variant="outline"
+              icon="i-lucide-trash-2"
+              :disabled="orphanFileCount === 0 || deletingOrphans"
+              :loading="deletingOrphans"
+              @click="deleteOrphanFiles"
+            >
+              清理孤立文件 ({{ orphanFileCount }})
+            </UButton>
+          </div>
+        </div>
+      </template>
+      <div class="text-sm text-muted mb-3">
+        扫描上传目录中的全部文件。有关联记录的文件仍可手动删除，但删除后对应记录的下载会失效。
+      </div>
+      <div class="text-sm mb-3">
+        共 {{ uploadFiles.length }} 个文件，{{ formatBytes(uploadFileBytes) }}；
+        孤立文件 {{ orphanFileCount }} 个，{{ formatBytes(orphanFileBytes) }}。
+      </div>
+      <div class="overflow-x-auto">
+        <UTable :columns="uploadFileColumns" :data="uploadFiles">
+          <template #linked-cell="{ row }">
+            <UBadge :color="row.original.linked ? 'success' : 'warning'" variant="subtle">
+              {{ row.original.linked ? '有关联记录' : '孤立文件' }}
+            </UBadge>
+          </template>
+          <template #size-cell="{ row }">
+            {{ formatBytes(row.original.size) }}
+          </template>
+          <template #actions-cell="{ row }">
+            <UButton
+              size="xs"
+              variant="ghost"
+              color="error"
+              icon="i-lucide-trash-2"
+              :loading="deletingUploadPath === row.original.path"
+              @click="deleteUploadFile(row.original)"
+            >
+              删除文件
+            </UButton>
+          </template>
+        </UTable>
+      </div>
+    </UCard>
+
     <UModal v-model:open="showDeleteModal">
       <template #content>
         <div class="p-6 space-y-4">
@@ -127,6 +182,7 @@ const form = ref({
 const printFilters = ref({ username: '', start: '', end: '' })
 const printRecords = ref([])
 const settings = ref({ retentionDays: '' })
+const uploadFiles = ref([])
 
 const savingUser = ref(false)
 const savingSettings = ref(false)
@@ -134,8 +190,15 @@ const deletingUserId = ref(null)
 const pendingDeleteUser = ref(null)
 const showDeleteModal = ref(false)
 const formErrors = ref({})
+const scanningFiles = ref(false)
+const deletingUploadPath = ref('')
+const deletingOrphans = ref(false)
 
 const isEditing = computed(() => !!form.value.id)
+const orphanFiles = computed(() => uploadFiles.value.filter(file => !file.linked))
+const orphanFileCount = computed(() => orphanFiles.value.length)
+const uploadFileBytes = computed(() => uploadFiles.value.reduce((sum, file) => sum + file.size, 0))
+const orphanFileBytes = computed(() => orphanFiles.value.reduce((sum, file) => sum + file.size, 0))
 
 const roleItems = [
   { label: '普通用户', value: 'user' },
@@ -159,6 +222,14 @@ const printColumns = [
   { accessorKey: 'pages', header: '页数' },
   { accessorKey: 'status', header: '状态' },
   { id: 'download', header: '下载' }
+]
+
+const uploadFileColumns = [
+  { accessorKey: 'path', header: '文件路径' },
+  { id: 'linked', header: '关联状态' },
+  { id: 'size', header: '大小' },
+  { accessorKey: 'modified', header: '修改时间' },
+  { id: 'actions', header: '操作' }
 ]
 
 function validateForm() {
@@ -334,7 +405,76 @@ async function saveSettings() {
   }
 }
 
+function formatBytes(size) {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  if (size < 1024 * 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`
+}
+
+async function loadUploadFiles() {
+  scanningFiles.value = true
+  try {
+    const resp = await fetch('/api/admin/upload-files', { credentials: 'include' })
+    if (!resp.ok) {
+      const msg = await readError(resp)
+      toast.add({ title: '扫描失败', description: msg, color: 'error', icon: 'i-lucide-x-circle' })
+      if (resp.status === 401) emit('logout')
+      return
+    }
+    uploadFiles.value = await resp.json()
+  } finally {
+    scanningFiles.value = false
+  }
+}
+
+async function deleteUploadFile(file) {
+  const linkedWarning = file.linked ? '\n\n该文件仍有关联打印记录，删除后记录下载会失效。' : ''
+  if (!confirm(`确定删除文件“${file.path}”吗？${linkedWarning}`)) return
+  deletingUploadPath.value = file.path
+  try {
+    const resp = await fetch(`/api/admin/upload-files?path=${encodeURIComponent(file.path)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': getCSRF() }
+    })
+    if (!resp.ok) {
+      const msg = await readError(resp)
+      toast.add({ title: '删除失败', description: msg, color: 'error', icon: 'i-lucide-x-circle' })
+      if (resp.status === 401) emit('logout')
+      return
+    }
+    toast.add({ title: '文件已删除', description: file.path, color: 'success', icon: 'i-lucide-check-circle' })
+    await loadUploadFiles()
+  } finally {
+    deletingUploadPath.value = ''
+  }
+}
+
+async function deleteOrphanFiles() {
+  if (!confirm(`确定删除 ${orphanFileCount.value} 个孤立文件吗？此操作不可恢复。`)) return
+  deletingOrphans.value = true
+  try {
+    const resp = await fetch('/api/admin/upload-files/orphans', {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': getCSRF() }
+    })
+    if (!resp.ok) {
+      const msg = await readError(resp)
+      toast.add({ title: '清理失败', description: msg, color: 'error', icon: 'i-lucide-x-circle' })
+      if (resp.status === 401) emit('logout')
+      return
+    }
+    const data = await resp.json()
+    toast.add({ title: '孤立文件已清理', description: `共删除 ${data.deleted || 0} 个文件`, color: 'success', icon: 'i-lucide-check-circle' })
+    await loadUploadFiles()
+  } finally {
+    deletingOrphans.value = false
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadUsers(), loadPrintRecords(), loadSettings()])
+  await Promise.all([loadUsers(), loadPrintRecords(), loadSettings(), loadUploadFiles()])
 })
 </script>

@@ -115,6 +115,9 @@ func main() {
 	admin.HandleFunc("/print-records", adminPrintRecordsHandler).Methods("GET")
 	admin.HandleFunc("/settings", adminGetSettingsHandler).Methods("GET")
 	admin.HandleFunc("/settings", adminUpdateSettingsHandler).Methods("PUT")
+	admin.HandleFunc("/upload-files", adminListUploadFilesHandler).Methods("GET")
+	admin.HandleFunc("/upload-files", adminDeleteUploadFileHandler).Methods("DELETE")
+	admin.HandleFunc("/upload-files/orphans", adminDeleteOrphanUploadFilesHandler).Methods("DELETE")
 
 	// Static files (embedded) - register after API routes so /api/* is matched first
 	serverFS := server.NewEmbeddedServer(frontend.FS)

@@ -146,8 +146,8 @@ cups-web/
 | POST | `/api/convert` | 上传文件，返回转换后的 PDF 流；支持单文件（`file` 字段，PDF / Office / OFD / 图片 / 文本）与多图合并（`files` 字段，多张图合成单个 PDF） |
 | POST | `/api/print` | 提交打印任务 |
 | GET | `/api/print-records` | 查询自己的打印记录（可带 `start` / `end`） |
-| DELETE | `/api/print-records` | 清空自己的打印记录（保留上传文件） |
-| DELETE | `/api/print-records/{id}` | 删除自己的一条打印记录（保留上传文件） |
+| DELETE | `/api/print-records` | 清空自己的打印记录；`deleteFiles=true` 时同步删除关联文件 |
+| DELETE | `/api/print-records/{id}` | 删除自己的一条打印记录；`deleteFiles=true` 时同步删除关联文件 |
 | GET | `/api/print-records/{id}/file` | 下载打印记录对应的原始文件 |
 
 ### 管理员接口（`/api/admin/*`）
@@ -161,6 +161,9 @@ cups-web/
 | GET | `/api/admin/print-records` | 查询全站打印记录（可带 `username` / `start` / `end`） |
 | GET | `/api/admin/settings` | 读取系统设置 |
 | PUT | `/api/admin/settings` | 更新系统设置（`retentionDays`） |
+| GET | `/api/admin/upload-files` | 扫描上传目录中的文件并标记打印记录关联状态 |
+| DELETE | `/api/admin/upload-files?path=<path>` | 删除上传目录中的指定文件 |
+| DELETE | `/api/admin/upload-files/orphans` | 删除上传目录中的全部孤立文件 |
 
 ### `/api/print` 表单字段
 

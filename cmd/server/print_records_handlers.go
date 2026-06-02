@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -79,13 +80,26 @@ func deletePrintRecordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	deleteFiles := r.URL.Query().Get("deleteFiles") == "true"
 	var deleted bool
+	var record store.PrintRecord
 	err = appStore.WithTx(r.Context(), false, func(tx *sql.Tx) error {
-		var err error
+		rec, err := store.GetPrintRecordByID(r.Context(), tx, id)
+		if err != nil {
+			return err
+		}
+		if rec.UserID != sess.UserID {
+			return sql.ErrNoRows
+		}
+		record = rec
 		deleted, err = store.DeletePrintRecord(r.Context(), tx, id, sess.UserID)
 		return err
 	})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSONError(w, http.StatusNotFound, "record not found")
+			return
+		}
 		writeJSONError(w, http.StatusInternalServerError, "failed to delete record")
 		return
 	}
@@ -93,7 +107,14 @@ func deletePrintRecordHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "record not found")
 		return
 	}
-	writeJSON(w, map[string]bool{"ok": true})
+	filesDeleted := 0
+	if deleteFiles {
+		filesDeleted, err = removeStoredFiles(uploadDir, record.StoredPath)
+		if err != nil {
+			log.Printf("failed to remove files for print record %d: %v", record.ID, err)
+		}
+	}
+	writeJSON(w, map[string]interface{}{"ok": true, "filesDeleted": filesDeleted})
 }
 
 func clearPrintRecordsHandler(w http.ResponseWriter, r *http.Request) {
@@ -103,9 +124,17 @@ func clearPrintRecordsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	deleteFiles := r.URL.Query().Get("deleteFiles") == "true"
 	var deleted int64
+	var paths []store.PrintRecordPath
 	err = appStore.WithTx(r.Context(), false, func(tx *sql.Tx) error {
 		var err error
+		if deleteFiles {
+			paths, err = store.ListPrintRecordPaths(r.Context(), tx, &sess.UserID)
+			if err != nil {
+				return err
+			}
+		}
 		deleted, err = store.DeletePrintRecordsByUserID(r.Context(), tx, sess.UserID)
 		return err
 	})
@@ -113,7 +142,16 @@ func clearPrintRecordsHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to clear records")
 		return
 	}
-	writeJSON(w, map[string]interface{}{"ok": true, "deleted": deleted})
+	filesDeleted := 0
+	for _, path := range paths {
+		removed, err := removeStoredFiles(uploadDir, path.StoredPath)
+		if err != nil {
+			log.Printf("failed to remove files for print record %d: %v", path.ID, err)
+			continue
+		}
+		filesDeleted += removed
+	}
+	writeJSON(w, map[string]interface{}{"ok": true, "deleted": deleted, "filesDeleted": filesDeleted})
 }
 
 func adminPrintRecordsHandler(w http.ResponseWriter, r *http.Request) {

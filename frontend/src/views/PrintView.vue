@@ -675,9 +675,10 @@ async function loadPrintRecords(silent = false) {
 
 async function deletePrintRecord(rec) {
   if (!confirm(`确定删除打印记录“${rec.filename}”吗？`)) return
+  const deleteFiles = confirm('是否同时删除关联上传文件？\n\n选择“确定”：删除记录及文件。\n选择“取消”：仅删除打印记录。')
 
   try {
-    const resp = await apiFetch(`/api/print-records/${encodeURIComponent(rec.id)}`, {
+    const resp = await apiFetch(`/api/print-records/${encodeURIComponent(rec.id)}?deleteFiles=${deleteFiles}`, {
       method: 'DELETE'
     }, () => emit('logout'))
     if (!resp.ok) throw new Error(await readError(resp))
@@ -691,9 +692,10 @@ async function deletePrintRecord(rec) {
 
 async function clearPrintRecords() {
   if (!confirm('确定清空所有打印记录吗？此操作不可恢复。')) return
+  const deleteFiles = confirm('是否同时删除全部关联上传文件？\n\n选择“确定”：删除记录及文件。\n选择“取消”：仅清空打印记录。')
 
   try {
-    const resp = await apiFetch('/api/print-records', {
+    const resp = await apiFetch(`/api/print-records?deleteFiles=${deleteFiles}`, {
       method: 'DELETE'
     }, () => emit('logout'))
     if (!resp.ok) throw new Error(await readError(resp))
