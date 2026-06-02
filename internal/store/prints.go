@@ -48,6 +48,23 @@ func UpdatePrintStatus(ctx context.Context, tx *sql.Tx, id int64, status string,
 	return err
 }
 
+func DeletePrintRecord(ctx context.Context, tx *sql.Tx, id int64, userID int64) (bool, error) {
+	res, err := tx.ExecContext(ctx, "DELETE FROM print_jobs WHERE id = ? AND user_id = ?", id, userID)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	return affected > 0, err
+}
+
+func DeletePrintRecordsByUserID(ctx context.Context, tx *sql.Tx, userID int64) (int64, error) {
+	res, err := tx.ExecContext(ctx, "DELETE FROM print_jobs WHERE user_id = ?", userID)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func GetPrintRecordByID(ctx context.Context, tx *sql.Tx, id int64) (PrintRecord, error) {
 	row := tx.QueryRowContext(ctx, `SELECT
 		p.id, p.user_id, u.username, p.printer_uri, p.filename, p.stored_path, p.pages,

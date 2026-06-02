@@ -135,7 +135,13 @@
 
       <!-- 右栏：打印记录 + 打印机状态 -->
       <div class="lg:col-span-2 space-y-4">
-        <PrintRecordList :records="printRecords" :loading="loadingRecords" @refresh="loadPrintRecords" />
+        <PrintRecordList
+          :records="printRecords"
+          :loading="loadingRecords"
+          @refresh="loadPrintRecords"
+          @delete="deletePrintRecord"
+          @clear="clearPrintRecords"
+        />
         <PrinterStatus :printer-info="printerInfo" :printer-uri="printer" :loading="loadingPrinterInfo" :error="printerInfoError" @refresh="loadPrinterInfo" />
       </div>
     </div>
@@ -664,6 +670,38 @@ async function loadPrintRecords(silent = false) {
     console.error('加载打印记录失败', e)
   } finally {
     loadingRecords.value = false
+  }
+}
+
+async function deletePrintRecord(rec) {
+  if (!confirm(`确定删除打印记录“${rec.filename}”吗？`)) return
+
+  try {
+    const resp = await apiFetch(`/api/print-records/${encodeURIComponent(rec.id)}`, {
+      method: 'DELETE'
+    }, () => emit('logout'))
+    if (!resp.ok) throw new Error(await readError(resp))
+
+    toast.add({ title: '打印记录已删除', color: 'success', icon: 'i-lucide-check-circle' })
+    await loadPrintRecords()
+  } catch (e) {
+    toast.add({ title: '删除失败', description: e.message, color: 'error', icon: 'i-lucide-x-circle' })
+  }
+}
+
+async function clearPrintRecords() {
+  if (!confirm('确定清空所有打印记录吗？此操作不可恢复。')) return
+
+  try {
+    const resp = await apiFetch('/api/print-records', {
+      method: 'DELETE'
+    }, () => emit('logout'))
+    if (!resp.ok) throw new Error(await readError(resp))
+
+    toast.add({ title: '打印记录已清空', color: 'success', icon: 'i-lucide-check-circle' })
+    await loadPrintRecords()
+  } catch (e) {
+    toast.add({ title: '清空失败', description: e.message, color: 'error', icon: 'i-lucide-x-circle' })
   }
 }
 

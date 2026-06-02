@@ -146,6 +146,8 @@ cups-web/
 | POST | `/api/convert` | 上传文件，返回转换后的 PDF 流；支持单文件（`file` 字段，PDF / Office / OFD / 图片 / 文本）与多图合并（`files` 字段，多张图合成单个 PDF） |
 | POST | `/api/print` | 提交打印任务 |
 | GET | `/api/print-records` | 查询自己的打印记录（可带 `start` / `end`） |
+| DELETE | `/api/print-records` | 清空自己的打印记录（保留上传文件） |
+| DELETE | `/api/print-records/{id}` | 删除自己的一条打印记录（保留上传文件） |
 | GET | `/api/print-records/{id}/file` | 下载打印记录对应的原始文件 |
 
 ### 管理员接口（`/api/admin/*`）

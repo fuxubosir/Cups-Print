@@ -12,6 +12,17 @@
         </div>
         <div class="flex items-center gap-1">
           <UButton variant="ghost" size="xs" icon="i-lucide-refresh-cw" @click.stop="$emit('refresh')" />
+          <UButton
+            v-if="records.length > 0"
+            variant="ghost"
+            color="error"
+            size="xs"
+            icon="i-lucide-trash-2"
+            :disabled="loading"
+            @click.stop="$emit('clear')"
+          >
+            清空
+          </UButton>
           <UIcon
             :name="listExpanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
             class="w-4 h-4 text-muted transition-transform duration-200"
@@ -42,9 +53,21 @@
               <p class="text-xs text-muted mt-0.5">{{ formatPrinterName(rec.printerUri) }} · {{ rec.pages }}页</p>
               <p class="text-xs text-muted">{{ formatTime(rec.createdAt) }}</p>
             </div>
-            <UBadge :color="statusColor(rec.status)" variant="subtle" size="xs">
-              {{ statusText(rec.status) }}
-            </UBadge>
+            <div class="flex items-center gap-1 shrink-0">
+              <UBadge :color="statusColor(rec.status)" variant="subtle" size="xs">
+                {{ statusText(rec.status) }}
+              </UBadge>
+              <UButton
+                variant="ghost"
+                color="error"
+                size="xs"
+                icon="i-lucide-trash-2"
+                :disabled="loading"
+                @click.stop="$emit('delete', rec)"
+              >
+                删除
+              </UButton>
+            </div>
           </div>
           <!-- 展开详情 -->
           <div v-if="expandedRecords.has(rec.id)" class="mt-2 pt-2 border-t grid grid-cols-2 gap-1 text-xs text-muted">
@@ -68,7 +91,7 @@ defineProps({
   loading: { type: Boolean, default: false }
 })
 
-defineEmits(['refresh'])
+defineEmits(['refresh', 'delete', 'clear'])
 
 const listExpanded = ref(window.innerWidth >= 1024) // 仅用于初始折叠态，用户可手动切换展开/折叠
 const expandedRecords = ref(new Set())

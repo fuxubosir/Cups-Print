@@ -99,6 +99,8 @@ func main() {
 	protected.HandleFunc("/convert", convertHandler).Methods("POST")
 	protected.HandleFunc("/estimate", estimateHandler).Methods("POST")
 	protected.HandleFunc("/print-records", printRecordsHandler).Methods("GET")
+	protected.HandleFunc("/print-records", clearPrintRecordsHandler).Methods("DELETE")
+	protected.HandleFunc("/print-records/{id:[0-9]+}", deletePrintRecordHandler).Methods("DELETE")
 	protected.HandleFunc("/print-records/{id:[0-9]+}/file", printRecordFileHandler).Methods("GET")
 	protected.HandleFunc("/printer-info", printerInfoHandler).Methods("GET")
 

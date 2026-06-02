@@ -66,6 +66,56 @@ func printRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
+func deletePrintRecordHandler(w http.ResponseWriter, r *http.Request) {
+	sess, err := auth.GetSession(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	idStr := mux.Vars(r)["id"]
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid record id")
+		return
+	}
+
+	var deleted bool
+	err = appStore.WithTx(r.Context(), false, func(tx *sql.Tx) error {
+		var err error
+		deleted, err = store.DeletePrintRecord(r.Context(), tx, id, sess.UserID)
+		return err
+	})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to delete record")
+		return
+	}
+	if !deleted {
+		writeJSONError(w, http.StatusNotFound, "record not found")
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func clearPrintRecordsHandler(w http.ResponseWriter, r *http.Request) {
+	sess, err := auth.GetSession(r)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var deleted int64
+	err = appStore.WithTx(r.Context(), false, func(tx *sql.Tx) error {
+		var err error
+		deleted, err = store.DeletePrintRecordsByUserID(r.Context(), tx, sess.UserID)
+		return err
+	})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to clear records")
+		return
+	}
+	writeJSON(w, map[string]interface{}{"ok": true, "deleted": deleted})
+}
+
 func adminPrintRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	startAt, endAt, err := parseDateRange(r)
 	if err != nil {
