@@ -14,10 +14,12 @@ services:
     restart: unless-stopped
 
   web:
-    image: fuxubosir/cups-print:custom
+    image: ${CUPS_PRINT_IMAGE:-fuxubosir/cups-print:custom}
     user: root
     environment:
       - CUPS_HOST=cups:631
+      - DB_PATH=/data/cups-web.db
+      - UPLOAD_DIR=/uploads
     volumes:
       - ./.data:/data
       - ./.uploads:/uploads

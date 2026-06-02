@@ -22,6 +22,17 @@
 
 > 本仓库是基于 [hanxi/cups-web](https://github.com/hanxi/cups-web) 修改的自用 Fork。原项目使用 MIT License 发布，原始版权声明保留在 [LICENSE](LICENSE) 中。
 
+## 🧩 自用版新增功能
+
+在上游项目基础上，本 Fork 增加了以下功能：
+
+- 页面标题、iPhone 主屏幕名称与图标统一为 **CUPS PRINT**
+- 普通用户可删除自己的单条打印记录，也可清空自己的全部打印记录
+- 删除记录时可选择「仅删除打印记录」或「删除打印记录及关联文件」
+- 管理后台新增「上传文件管理」：扫描上传目录、显示文件大小与关联状态
+- 管理员可逐个删除上传文件，也可一键清理没有打印记录关联的孤立文件
+- 文件删除接口限制在上传目录内，防止通过路径跳转误删其他文件
+
 ## 📸 界面预览
 
 <div align="center">
@@ -82,12 +93,14 @@
 - **多用户系统**：支持 `admin` / `user` 两种角色
 - **默认管理员**：首次启动自动创建 `admin/admin`，`admin` 账号受保护无法被删除或重命名
 - **打印记录**：完整保存每次打印的文件、页数、份数、双面/彩色选项、状态等
+- **记录清理**：用户可删除自己的单条记录或清空全部记录，并选择是否同步删除关联文件
 
 ### 管理后台
 
 - **用户管理**：创建、编辑、删除用户；修改角色与联系信息
 - **打印记录查询**：可按用户名、时间范围过滤
 - **数据保留策略**：按天数自动清理过期打印记录和对应文件（每小时巡检一次）
+- **上传文件管理**：扫描上传目录，区分有关联记录的文件与孤立文件；支持逐个删除和一键清理孤立文件
 
 ### 安全
 
@@ -100,7 +113,7 @@
 - **后端**：Go 1.26 · Gorilla Mux · SQLite（`modernc.org/sqlite`，纯 Go 实现，无需 CGO）
 - **打印协议**：[OpenPrinting/goipp](https://github.com/OpenPrinting/goipp)（IPP）
 - **前端**：Vue 3 · Vite 7 · [Nuxt UI v4](https://ui.nuxt.com/) · Tailwind CSS v4 · Vue Router（hash 模式）
-- **文档转换**：LibreOffice（Office → PDF）· [ofdrw](https://github.com/ofdrw/ofdrw)（OFD → PDF，Java 17）
+- **文档转换**：LibreOffice（Office → PDF）· [ofdrw](https://github.com/ofdrw/ofdrw)（OFD → PDF，Java 21）
 - **打印服务**：[CUPS](https://www.cups.org/)
 
 ## 🚀 快速开始
@@ -138,10 +151,12 @@ services:
     restart: unless-stopped
 
   web:
-    image: fuxubosir/cups-print:custom
+    image: ${CUPS_PRINT_IMAGE:-fuxubosir/cups-print:custom}
     user: root
     environment:
       - CUPS_HOST=cups:631
+      - DB_PATH=/data/cups-web.db
+      - UPLOAD_DIR=/uploads
     volumes:
       - ./.data:/data
       - ./.uploads:/uploads
@@ -165,9 +180,12 @@ wget https://raw.githubusercontent.com/fuxubosir/Cups-Print/master/docker-compos
 ```bash
 CUPSADMIN=admin
 CUPSPASSWORD=your_cups_password
+CUPS_PRINT_IMAGE=fuxubosir/cups-print:custom
 ```
 
 ### 3. 启动服务
+
+`fuxubosir/cups-print:custom` 是自用镜像标签。首次部署前，请先按照下方「本地构建 Docker 镜像」完成构建。
 
 ```bash
 docker-compose up -d
@@ -196,7 +214,7 @@ docker-compose up -d
 
 ### 1. 下载二进制
 
-从 [GitHub Releases](https://github.com/hanxi/cups-web/releases) 下载对应平台的二进制：
+从本 Fork 的 [GitHub Releases](https://github.com/fuxubosir/Cups-Print/releases) 下载对应平台的二进制。若暂未发布对应版本，也可使用[上游 Releases](https://github.com/hanxi/cups-web/releases)：
 
 | 平台 | 架构 | 文件名 |
 | --- | --- | --- |
@@ -209,7 +227,7 @@ docker-compose up -d
 | Windows | amd64 | `cups-web-windows-amd64.exe` |
 
 ```bash
-wget https://github.com/hanxi/cups-web/releases/latest/download/cups-web-linux-amd64
+wget https://github.com/fuxubosir/Cups-Print/releases/latest/download/cups-web-linux-amd64
 chmod +x cups-web-linux-amd64
 ```
 
@@ -230,7 +248,7 @@ export LISTEN_ADDR=:8080
 ./cups-web-linux-amd64 -addr :8080
 ```
 
-> ⚠️ **OFD 打印仅在 Docker 镜像中开箱即用**。二进制部署若需支持 OFD，需要另行安装 Java 17 并把 `ofd-converter.jar` 放到 `/ofd-converter.jar`（或手动改源码中的路径）。
+> ⚠️ **OFD 打印仅在 Docker 镜像中开箱即用**。二进制部署若需支持 OFD，需要另行安装 Java 21 并把 `ofd-converter.jar` 放到 `/ofd-converter.jar`（或手动改源码中的路径）。
 
 ### 3. 访问 Web
 
@@ -262,6 +280,12 @@ export LISTEN_ADDR=:8080
 | `CUPSADMIN` | CUPS 管理员用户名（**必填**） |
 | `CUPSPASSWORD` | CUPS 管理员密码（**必填**） |
 
+### Docker Compose 镜像变量
+
+| 变量名 | 说明 | 默认值 |
+| --- | --- | --- |
+| `CUPS_PRINT_IMAGE` | Web 容器使用的镜像，可切换到已经测试通过的提交号标签 | `fuxubosir/cups-print:custom` |
+
 ### 默认端口
 
 - CUPS：`631`
@@ -274,6 +298,89 @@ Docker 默认卷映射：
 - `./.data` → 数据库
 - `./.uploads` → 上传的原始文件与转换后 PDF
 - `./.etc` → CUPS 配置
+
+---
+
+## 🐳 本地构建与测试部署
+
+建议每次修改后先构建带提交号的镜像，在独立测试容器中验证，再替换正式容器。
+
+### 1. 构建镜像
+
+支持 BuildKit 的 Docker 环境：
+
+```bash
+git clone https://github.com/fuxubosir/Cups-Print.git
+cd Cups-Print
+
+docker build \
+  --build-arg VERSION=custom-$(git rev-parse --short HEAD) \
+  -t fuxubosir/cups-print:custom-$(git rev-parse --short HEAD) \
+  -t fuxubosir/cups-print:custom .
+```
+
+iStoreOS 的 Docker 如果提示缺少 `buildx`，可使用兼容模式：
+
+```bash
+cp Dockerfile Dockerfile.bak
+sed -i \
+  's/FROM --platform=$BUILDPLATFORM debian:trixie-slim AS java-builder/FROM debian:trixie-slim AS java-builder/' \
+  Dockerfile
+
+DOCKER_BUILDKIT=0 docker build \
+  --build-arg VERSION=custom-$(git rev-parse --short HEAD) \
+  -t fuxubosir/cups-print:custom-$(git rev-parse --short HEAD) \
+  -t fuxubosir/cups-print:custom .
+```
+
+### 2. 启动测试容器
+
+```bash
+VERSION=custom-$(git rev-parse --short HEAD)
+mkdir -p /opt/cups-web-test/data /opt/cups-web-test/uploads
+docker rm -f cups-web-test 2>/dev/null || true
+
+docker run -d \
+  --name cups-web-test \
+  --restart unless-stopped \
+  --user root \
+  --network cups-web_default \
+  -p 1181:8080 \
+  -e CUPS_HOST=cups:631 \
+  -e DB_PATH=/data/cups-web.db \
+  -e UPLOAD_DIR=/uploads \
+  -v /opt/cups-web-test/data:/data \
+  -v /opt/cups-web-test/uploads:/uploads \
+  fuxubosir/cups-print:$VERSION
+```
+
+浏览器访问 `http://<iStoreOS-IP>:1181`，完成上传、打印、删除记录与文件清理测试。
+
+### 3. 替换正式容器
+
+测试通过后，使用同一个已验证镜像替换正式容器：
+
+```bash
+VERSION=custom-$(git rev-parse --short HEAD)
+docker rm -f cups-web-test
+docker rm -f cups-web
+mkdir -p /opt/cups-web/data /opt/cups-web/uploads
+
+docker run -d \
+  --name cups-web \
+  --restart unless-stopped \
+  --user root \
+  --network cups-web_default \
+  -p 1180:8080 \
+  -e CUPS_HOST=cups:631 \
+  -e DB_PATH=/data/cups-web.db \
+  -e UPLOAD_DIR=/uploads \
+  -v /opt/cups-web/data:/data \
+  -v /opt/cups-web/uploads:/uploads \
+  fuxubosir/cups-print:$VERSION
+```
+
+正式数据保存在 `/opt/cups-web/data` 与 `/opt/cups-web/uploads`，删除容器不会删除这些目录。
 
 ---
 
@@ -301,6 +408,7 @@ Docker 默认卷映射：
 - **用户管理**：创建、编辑、删除；默认 `admin` 账号不可删除、不可改名、角色固定
 - **打印记录**：查看全站记录，按用户名/日期过滤，下载原始文件
 - **系统设置**：数据保留天数（`0` 表示永久保留）
+- **上传文件管理**：扫描全部上传文件，查看关联状态与空间占用；删除指定文件或一键清理孤立文件
 
 ---
 
@@ -376,7 +484,13 @@ docker-compose up -d
 
 ### 上传文件一直堆积占空间？
 
-在「管理后台 → 系统设置」中设置「数据保留天数」为大于 0 的值，维护任务每小时巡检一次，自动清理过期记录与文件。
+可以使用以下方式清理：
+
+1. 在「管理后台 → 系统设置」中将「自动清理天数」设为大于 `0` 的值。维护任务每小时巡检一次，自动清理过期记录与关联文件。
+2. 在「管理后台 → 上传文件管理」中扫描目录，逐个删除文件或一键清理孤立文件。
+3. 用户删除打印记录时，选择「删除打印记录及关联文件」。
+
+如果用户删除记录时选择「仅删除打印记录」，对应文件会成为孤立文件，可在管理后台统一清理。
 
 ### 如何查看日志？
 

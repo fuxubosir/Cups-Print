@@ -1,12 +1,14 @@
-# CUPS Web 开发者指南
+# CUPS PRINT 开发者指南
 
 本文档面向开发者，介绍项目架构、API、开发流程与扩展方式。用户文档请参阅 [README.md](README.md)。
+
+> 本仓库是基于 [hanxi/cups-web](https://github.com/hanxi/cups-web) 修改的自用 Fork。原项目使用 MIT License 发布，原始版权声明保留在 [LICENSE](LICENSE) 中。
 
 ## 📦 项目概述
 
 - **项目定位**：基于 CUPS 的 Web 打印管理工具，前后端分离
 - **技术栈**：Go 1.26（后端）+ Vue 3（前端）+ SQLite（存储）+ IPP（打印协议）
-- **部署形态**：单二进制（前端通过 `go:embed` 打包进可执行文件），或 Docker 镜像（内置 LibreOffice + Java 17 + OFD 转换器）
+- **部署形态**：单二进制（前端通过 `go:embed` 打包进可执行文件），或 Docker 镜像（内置 LibreOffice + Java 21 + OFD 转换器）
 
 ## 🛠️ 技术栈
 
@@ -42,7 +44,7 @@
 | --- | --- |
 | CUPS | 打印服务，通过 IPP 通信 |
 | LibreOffice（headless） | Office 文档 → PDF；同时作为 PDF 标准化的兜底链路 |
-| Java 17 + `ofd-converter.jar` | OFD 文档 → PDF（基于 `ofdrw`） |
+| Java 21 + `ofd-converter.jar` | OFD 文档 → PDF（基于 `ofdrw`） |
 | Ghostscript (`gs`) | PDF 标准化首选链路：统一降级到 PDF 1.4 兼容性（主要面向 CUPS/老打印机对新版 PDF 解析能力弱的场景）。**注意：`gs pdfwrite` 会对原 PDF 的每个字体对象强行加上 subset 前缀（`CCGWER+` 之类 6 位随机码）并重建字体字典**，对"空壳 Type0 字体 + `UniGB-UCS2-H` 外部 CMap"（Acrobat 导出的准考证/国标表格最常见的形态）是**破坏性改造**：原 PDF 的 `/BaseFont /#ba#da#cc#e5`（宋体 GBK 字节转义）会被改写成 `/BaseFont /BPCXJX+#cb#ce#cc#e5`，让 pdf.js 等渲染器误以为有内嵌字形可用、走内嵌路径却拿不到真实 FontFile，字宽表 vs 字形度量对不上导致"先正确一闪、再错位挤压"。因此该链路**不是 PDF 预览乱码的解药**，只在 CUPS 驱动确认无法解析原字体字典时才有收益。本地 macOS 需要 `brew install ghostscript`；Docker 镜像里给 gs 配了**三层中文字体兜底**（见 `Dockerfile` 注释）：①`/etc/ghostscript/cidfmap.local` 把 GBK 字节 BaseFont（宋/黑/楷/仿宋 × Regular/Bold，共 8 条）精准映射到 `arphic-uming` / `arphic-ukai` / `wqy-zenhei` 这三套**纯 TrueType**字体，并由 `pdf_normalize.go::cidfmapPreambleArgs` 在每次 gs 调用时显式用 `-I/etc/ghostscript -c "(cidfmap.local) .runlibfile"` 加载，不依赖任何"Debian 自动合并"约定；②`fonts-droid-fallback` 作为 cidfmap 未命中时的 Adobe-GB1 CID 兜底（Debian 把 gs 依赖的 `DroidSansFallback.ttf` 剥离到独立包）；③`fonts-noto-cjk` 等 Unicode 字形包仅服务 LibreOffice 渲染 Office 文档，不参与 CIDFSubst 路径。之所以只用 arphic/wqy 而不用 Noto CJK OTC，是因为 gs 10.x 对 CFF-based OpenType Collection 的 CIDFont 子字体索引偶有坑，纯 TrueType 最稳。|
 
 ## 📁 项目结构
@@ -55,9 +57,10 @@ cups-web/
 │   ├── bootstrap.go               # 默认 admin 初始化
 │   ├── auth_handlers.go           # 登录 / 登出 / session / csrf / me
 │   ├── admin_handlers.go          # 管理员：用户 / 系统设置
+│   ├── admin_upload_files_handlers.go # 管理员：上传文件扫描 / 删除
 │   ├── user_handlers.go           # /api/me
 │   ├── print_handlers.go          # /api/print（主打印入口）
-│   ├── print_records_handlers.go  # 打印记录查询、文件下载
+│   ├── print_records_handlers.go  # 打印记录查询、删除、文件下载
 │   ├── printer_info_handler.go    # 打印机属性查询（IPP Get-Printer-Attributes）
 │   ├── convert_handler.go         # /api/convert（文档 → PDF 转换）
 │   ├── convert_utils.go           # 调 LibreOffice / OFD 转换器的工具
@@ -68,6 +71,7 @@ cups-web/
 │   ├── pdf_normalize_test.go      # PDF 标准化相关的本地测试用例
 │   ├── fonts.go                   # 中文字体加载（内嵌 assets/fonts）
 │   ├── maintenance.go             # 后台维护任务（按保留天数清理）
+│   ├── upload_files.go            # 上传目录安全路径解析、扫描、文件删除
 │   ├── version.go                 # 构建期注入的版本号（-ldflags -X main.Version）
 │   └── assets/fonts/              # 打包进二进制的字体资源
 ├── internal/
@@ -164,6 +168,20 @@ cups-web/
 | GET | `/api/admin/upload-files` | 扫描上传目录中的文件并标记打印记录关联状态 |
 | DELETE | `/api/admin/upload-files?path=<path>` | 删除上传目录中的指定文件 |
 | DELETE | `/api/admin/upload-files/orphans` | 删除上传目录中的全部孤立文件 |
+
+### 打印记录删除语义
+
+- `DELETE /api/print-records/{id}` 与 `DELETE /api/print-records` 默认只删除数据库中的打印记录。
+- 带查询参数 `deleteFiles=true` 时，在删除记录后同步删除关联的原始上传文件与 `.print.pdf` 副文件。
+- 普通用户接口始终按当前 Session 的 `user_id` 限制删除范围，不能删除其他用户的记录。
+- 文件删除失败时，数据库记录不会回滚；服务端记录日志，残留文件会成为孤立文件，可由管理员稍后扫描清理。
+
+### 上传文件管理
+
+- `GET /api/admin/upload-files` 递归扫描 `UPLOAD_DIR`，将文件标记为「有关联记录」或「孤立文件」。
+- `DELETE /api/admin/upload-files?path=<path>` 删除指定普通文件。删除仍有关联记录的文件后，对应记录的下载入口会失效。
+- `DELETE /api/admin/upload-files/orphans` 只删除扫描时未关联到任何打印记录的文件。
+- 所有文件操作都经过 `resolveUploadPath`：只接受 `UPLOAD_DIR` 内的相对路径，拒绝绝对路径、空路径和目录跳转。
 
 ### `/api/print` 表单字段
 
@@ -264,7 +282,7 @@ KV 表：`key TEXT PRIMARY KEY` + `value TEXT`。
 6. **提交打印**：`ipp.SendPrintJob` 构造 `Print-Job` IPP 请求并发出
 7. **回写状态**：成功后更新为 `printed` 并回填 `job_id`
 
-转换或标准化后的 PDF 以 `<原文件>.print.pdf` 副文件形式存到 `uploads/`，维护任务清理时会连同原文件一起删除。`/api/convert` 对 PDF 也会走同一条 `normalizePDF` 管线，让前端 `PdfCanvas` 预览与最终打印使用完全相同的字节流。
+转换或标准化后的 PDF 以 `<原文件>.print.pdf` 副文件形式存到 `uploads/`。维护任务、用户显式选择「删除记录及文件」和管理员文件清理都会按各自规则处理这些文件。`/api/convert` 对 PDF 也会走同一条 `normalizePDF` 管线，让前端 `PdfCanvas` 预览与最终打印使用完全相同的字节流。
 
 > ⚠️ 已知副作用：Acrobat 导出的"空壳 Type0 + `UniGB-UCS2-H`"字体字典（`/BaseFont /#ba#da#cc#e5` 这种裸宋体名，准考证/国标表格常见）经 gs 改写为"subset 前缀 + FontFile2 假内嵌"后（`/BaseFont /CCGWER+#ba#da#cc#e5`），**pdf.js** 预览会出现"每 3-4 字错 1 字"的挤压错位（浏览器原生 PDF 引擎因有系统字体兜底不受影响）。之所以仍然共用 `normalizePDF`，是因为"预览与打印看到同一份字节流"的一致性比这类特殊 PDF 的预览准确性更重要——前端只使用 `pdfjs-dist` 在 canvas 里渲染预览（见 `frontend/src/components/print/PdfCanvas.vue`），遇到上述错位时用户可以忽略，不影响打印。
 
@@ -282,6 +300,17 @@ KV 表：`key TEXT PRIMARY KEY` + `value TEXT`。
 2. 按 `created_at < now - retentionDays` 删除 `print_jobs` 记录
 3. 同步删除 `uploads/` 下的原文件与 `.print.pdf` 副文件
 4. 若有删除发生：执行 `VACUUM` 回收空间 + `PRAGMA wal_checkpoint(TRUNCATE)`
+
+### 手动文件清理
+
+管理员页面的「上传文件管理」用于处理自动维护任务无法覆盖的残留文件：
+
+1. 扫描 `UPLOAD_DIR` 下的全部普通文件。
+2. 根据 `print_jobs.stored_path` 和 `<stored_path>.print.pdf` 判断是否有关联记录。
+3. 允许逐个删除文件。
+4. 允许一键删除全部孤立文件。
+
+典型场景：用户删除打印记录时选择「仅删除打印记录」，对应文件会成为孤立文件，后续由管理员统一清理。
 
 ## 🔧 开发环境
 
@@ -336,21 +365,45 @@ Vite 已配置 `manualChunks`：
 
 ### Docker 多阶段构建
 
-`Dockerfile` 有三个构建阶段，**全部覆盖 `linux/amd64` + `linux/arm64` + `linux/arm/v7` 三架构**：
+`Dockerfile` 使用多阶段构建，覆盖 `linux/amd64` + `linux/arm64` + `linux/arm/v7` 三架构：
 
 1. `frontend-build`（`node:20-slim` + `npm`）：`npm ci` + `vite build` 出 Vite dist
-2. `java-builder`（`debian:bookworm-slim` + apt `openjdk-17-jdk-headless` + `maven`）：构建 `ofd-converter.jar`
+2. `java-builder`（`debian:trixie-slim` + apt `openjdk-21-jdk-headless` + Maven tarball）：构建 `ofd-converter.jar`
 3. `builder`（`golang:1.26`）：`go build` 输出二进制（`CGO_ENABLED=0`）
+4. `runtime`（`debian:trixie-slim`）：安装 LibreOffice、JRE 21、Ghostscript 与中文字体，只复制运行所需产物
 
-运行阶段使用 `debian:bookworm-slim`，装上 LibreOffice（core/writer/calc/impress）+ JRE 17 + 中文字体（`fonts-noto-cjk`、`fonts-wqy-zenhei`、`fonts-arphic-*`），以 `nonroot` 用户运行。
+运行阶段使用 `debian:trixie-slim`，装上 LibreOffice（core/writer/calc/impress）+ JRE 21 + 中文字体（`fonts-noto-cjk`、`fonts-wqy-zenhei`、`fonts-arphic-*`），以 `nonroot` 用户运行。
 
-> 💡 **关于三架构覆盖的基础镜像选型**：最初 `frontend-build` 用 `oven/bun`、`java-builder` 用 `maven:3.9-eclipse-temurin-17`，但这两个基础镜像都不支持 32-bit ARM：
-> - `oven/bun`：Bun 官方明确不支持 32-bit ARM（[oven-sh/bun#5060](https://github.com/oven-sh/bun/issues/5060) "Closed as not planned"，仅 arm64/x64）。**替代方案**：切到 `node:20-slim`（官方 manifest 覆盖 `amd64`/`arm32v7`/`arm64v8`），用 `npm ci` + `npm run build` 替换 `bun install` + `bun run build`；前端 `package.json` 里 scripts 全是标准 Vite/Node 命令，不依赖 bun 专有 API，迁移无业务代码改动。代价是必须维护 `frontend/package-lock.json`（和 `bun.lock` 并存；`npm ci` 要求 lockfile 与 `package.json` 严格一致，开发时如果用 `bun add` / `bun remove` 改了依赖，需同步跑一次 `npm install` 更新 `package-lock.json` 再提交，否则 CI 会在 `npm ci` 阶段挂掉）。
-> - `maven:3.9-eclipse-temurin-17`：Eclipse Temurin 对 "Linux ARM 32-bit Hard-Float" 仅 JDK 8/11 有二进制，JDK 17/21/25 [官方明确 Not Supported](https://adoptium.net/supported-platforms)；Maven 官方镜像同样没有 armhf manifest。**现用方案**：`FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS java-builder`，把 java-builder 阶段**固定跑在 host 本地架构**（GitHub Actions 上永远是 amd64），apt 装 `openjdk-17-jdk-headless`，Maven 用 Apache 官方 3.9.x tarball；产物 `ofd-converter.jar` 是纯 Java 字节码，在 runtime 阶段被各架构的 JRE 直接 `COPY --from=java-builder` 过来复用，跨架构通吃。**为什么必须锁 `BUILDPLATFORM`**：QEMU 用户态模拟 armhf 下，OpenJDK 17 不稳定——Maven 无论是用 Debian 的 `apt install maven` 还是用 Apache 官方 tarball 启动都会随机抛 `java.lang.ClassNotFoundException: org.apache.maven.cli.MavenCli`，堆栈完全一致（只差 classworlds 版本行号：Debian 包版的 `SelfFirstStrategy.java:50` vs tarball 版的 `:42`），说明问题在 JVM 层（QEMU 下的 ClassLoader / JIT 稳定性），不是 Maven 安装方式能救的；Adoptium 官方放弃 JDK 17+ armhf 二进制也印证了"ARM 32-bit 上的现代 JVM 本来就是薄弱环节"。让 java-builder 锁 amd64 就彻底绕开了这堵墙，也是 Docker 官方推荐的 multi-arch Java 最佳实践（纯字节码跨架构是 JVM 的第一性原理）。**为什么顶部需要 `# syntax=docker/dockerfile:1`**：`BUILDPLATFORM` 是 BuildKit 前端注入的自动变量，旧 buildx 环境若缺失该声明会静默把它当成空，`--platform=$BUILDPLATFORM` 退化成默认 target，java-builder 又会落回 QEMU。**为什么 `FROM debian:bookworm-slim AS runtime` 不加 `--platform`**：runtime 阶段要装 LibreOffice/JRE/中文字体并真正被各架构的 Docker 节点拉取运行，必须跟随 `TARGETPLATFORM` 生成三份镜像；锁 amd64 会让 arm64/armhf 节点拉到 amd64 层、QEMU 模拟整个 runtime，完全跑偏。**Maven 为什么仍用 tarball 而不是 `apt install maven`**：虽然 host amd64 上 `apt install maven` 不会触发 QEMU 坑，但 Debian 包依赖 `dpkg triggers + update-alternatives` 更新软链（[carlossg/docker-maven#213](https://github.com/carlossg/docker-maven/issues/213)），换 base 镜像或升级系统时偶有兼容性问题；Apache tarball 的 `lib/` 自包含所有 jar，不依赖任何 OS 打包细节，一劳永逸。tarball URL 走 dlcdn.apache.org → archive.apache.org 的 fallback 链（前者只保留 current release，后者永久归档），升级 Maven 时只需改 `Dockerfile` 里的 `MAVEN_VERSION`。
+### iStoreOS 本机构建
+
+iStoreOS 自带 Docker 可能缺少 `buildx`，无法使用 BuildKit。若只在同一台设备构建和运行本机架构镜像，可临时移除 `java-builder` 的 `--platform=$BUILDPLATFORM` 并使用兼容模式：
+
+```bash
+cp Dockerfile Dockerfile.bak
+sed -i \
+  's/FROM --platform=$BUILDPLATFORM debian:trixie-slim AS java-builder/FROM debian:trixie-slim AS java-builder/' \
+  Dockerfile
+
+DOCKER_BUILDKIT=0 docker build \
+  --build-arg VERSION=custom-$(git rev-parse --short HEAD) \
+  -t fuxubosir/cups-print:custom-$(git rev-parse --short HEAD) \
+  -t fuxubosir/cups-print:custom .
+```
+
+测试环境与正式环境使用相同镜像、不同容器和不同持久化目录：
+
+| 环境 | 容器名 | 宿主端口 | 数据目录 | 上传目录 |
+| --- | --- | --- | --- | --- |
+| 测试 | `cups-web-test` | `1181` | `/opt/cups-web-test/data` | `/opt/cups-web-test/uploads` |
+| 正式 | `cups-web` | `1180` | `/opt/cups-web/data` | `/opt/cups-web/uploads` |
+
+> 💡 **关于三架构覆盖的基础镜像选型**：
+> - `frontend-build` 使用 `node:20-slim` + `npm`，覆盖 `amd64` / `arm64` / `armv7`。Bun 官方不支持 32-bit ARM，因此 Docker 构建不使用 Bun。
+> - `java-builder` 使用 `FROM --platform=$BUILDPLATFORM debian:trixie-slim` 固定在构建机架构运行，并安装 `openjdk-21-jdk-headless` 与 Maven tarball。`ofd-converter.jar` 是纯 Java 字节码，可以复制到各目标架构的 runtime 中运行。这样可以绕开 QEMU 模拟 armhf 时现代 JVM 不稳定的问题。
 
 ### CI/CD
 
-`.github/workflows/` 会在 push 到任何分支和 tag 时，针对 7 个平台交叉编译二进制（`linux/amd64`、`linux/arm64`、`linux/armv7`、`linux/loong64`、`darwin/amd64`、`darwin/arm64`、`windows/amd64`），tag push 时自动创建 Release。CI 使用的 Go 版本（`setup-go` 的 `go-version`）与 `go.mod` 保持一致（当前均为 `1.26`），升级 `go.mod` 时请同步 CI。
+`.github/workflows/build-release.yml` 会在 push 到分支和 tag 时，针对 7 个平台交叉编译二进制（`linux/amd64`、`linux/arm64`、`linux/armv7`、`linux/loong64`、`darwin/amd64`、`darwin/arm64`、`windows/amd64`），并创建 GitHub Release。CI 当前固定使用 Go `1.26.1`，用于兼容部分嵌入式 Linux 设备的内核版本字符串；升级 Go 版本时需同步验证这些设备。
 
 > 💡 补充说明：
 > - `linux/armv7` 使用 `GOARCH=arm` + `GOARM=7`，覆盖树莓派 2/3、主流 ARM SBC 等 32 位硬浮点设备；matrix 里通过 `goarm` 字段声明，Build 步骤已把 `GOARM` 透传到 `env`（其他非 arm 目标此字段为空不生效）。
@@ -403,18 +456,19 @@ Vite 已配置 `manualChunks`：
 ### 后端测试
 
 ```bash
-go test ./...                # 全部测试
-go test -cover ./...         # 带覆盖率
-go vet ./...                 # 静态检查
+go test ./internal/... ./cmd/server
+go test -cover ./internal/... ./cmd/server
+go vet ./internal/... ./cmd/server
 ```
 
-> 当前仓库主要以手工测试 + 日志为主，`test/` 目录下存放临时测试用例，不参与 CI。新增核心模块时建议补 `_test.go`。
+> `test/` 目录下存放多个独立的临时示例程序，当前同时声明 `main`，因此 `go test ./...` 会在 `cups-web/test` 报重复定义。验证正式代码时使用上面的限定路径。
 
 ### 前端验证
 
 ```bash
 cd frontend
-bun run build                # 构建检查（类型与语法）
+npm ci
+npm run build                # Docker 与本地一致的生产构建检查
 bun run dev                  # 本地调试
 ```
 
@@ -455,4 +509,6 @@ SELECT * FROM settings;
 
 ---
 
-**维护者**：涵曦（<im.hanxi@gmail.com>）
+**自用 Fork**：[fuxubosir/Cups-Print](https://github.com/fuxubosir/Cups-Print)
+
+**上游项目**：[hanxi/cups-web](https://github.com/hanxi/cups-web)
