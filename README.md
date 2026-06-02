@@ -1,18 +1,12 @@
-# 🖨️ CUPS Web — 网页打印管理
+# 🖨️ CUPS PRINT — 自用网页打印管理
 
 <div align="center">
 
-[![GitHub Release](https://img.shields.io/github/v/release/hanxi/cups-web?style=flat-square&logo=github&color=blue)](https://github.com/hanxi/cups-web/releases)
-[![Docker Pulls](https://img.shields.io/docker/pulls/hanxi/cups-web?style=flat-square&logo=docker)](https://hub.docker.com/r/hanxi/cups-web)
-[![Docker Image Size](https://img.shields.io/docker/image-size/hanxi/cups-web/latest?style=flat-square&logo=docker&color=066da5)](https://hub.docker.com/r/hanxi/cups-web)
-[![GitHub Stars](https://img.shields.io/github/stars/hanxi/cups-web?style=flat-square&logo=github)](https://github.com/hanxi/cups-web/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/hanxi/cups-web?style=flat-square&logo=github)](https://github.com/hanxi/cups-web/network/members)
-[![GitHub Issues](https://img.shields.io/github/issues/hanxi/cups-web?style=flat-square&logo=github)](https://github.com/hanxi/cups-web/issues)
-[![GitHub Last Commit](https://img.shields.io/github/last-commit/hanxi/cups-web?style=flat-square&logo=github)](https://github.com/hanxi/cups-web/commits)
-[![GitHub Downloads](https://img.shields.io/github/downloads/hanxi/cups-web/total?style=flat-square&logo=github&color=success)](https://github.com/hanxi/cups-web/releases)
-[![License](https://img.shields.io/github/license/hanxi/cups-web?style=flat-square&color=blue)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/fuxubosir/Cups-Print?style=flat-square&logo=github)](https://github.com/fuxubosir/Cups-Print/stargazers)
+[![GitHub Last Commit](https://img.shields.io/github/last-commit/fuxubosir/Cups-Print?style=flat-square&logo=github)](https://github.com/fuxubosir/Cups-Print/commits)
+[![License](https://img.shields.io/github/license/fuxubosir/Cups-Print?style=flat-square&color=blue)](LICENSE)
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/hanxi/cups-web?style=flat-square&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/fuxubosir/Cups-Print?style=flat-square&logo=go)](https://golang.org)
 [![Vue 3](https://img.shields.io/badge/Vue-3.5-4FC08D?style=flat-square&logo=vue.js)](https://vuejs.org)
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=flat-square&logo=vite)](https://vitejs.dev)
 [![Nuxt UI](https://img.shields.io/badge/Nuxt%20UI-v4-00DC82?style=flat-square&logo=nuxt.js)](https://ui.nuxt.com)
@@ -20,11 +14,13 @@
 [![CUPS](https://img.shields.io/badge/CUPS-IPP-orange?style=flat-square)](https://www.cups.org)
 [![SQLite](https://img.shields.io/badge/SQLite-WAL-003B57?style=flat-square&logo=sqlite)](https://www.sqlite.org)
 
-🏠 [GitHub](https://github.com/hanxi/cups-web) • 🐳 [Docker Hub](https://hub.docker.com/r/hanxi/cups-web) • 📖 [开发文档](AGENTS.md) • 💬 [微信群](https://github.com/hanxi/cups-web/issues/36) • 💰 [赞赏支持](https://afdian.com/a/imhanxi)
+🏠 [GitHub](https://github.com/fuxubosir/Cups-Print) • 📖 [开发文档](AGENTS.md) • ⬆️ [上游项目](https://github.com/hanxi/cups-web)
 
 </div>
 
 基于 CUPS 的网页版打印管理工具。通过浏览器上传文件、远程提交打印任务，支持多用户管理与打印记录追踪，适合家庭和小型办公室使用。
+
+> 本仓库是基于 [hanxi/cups-web](https://github.com/hanxi/cups-web) 修改的自用 Fork。原项目使用 MIT License 发布，原始版权声明保留在 [LICENSE](LICENSE) 中。
 
 ## 📸 界面预览
 
@@ -142,7 +138,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: hanxi/cups-web:latest
+    image: fuxubosir/cups-print:custom
     user: root
     environment:
       - CUPS_HOST=cups:631
@@ -159,7 +155,7 @@ services:
 也可直接下载仓库内的 `docker-compose.yml`：
 
 ```bash
-wget https://raw.githubusercontent.com/hanxi/cups-web/master/docker-compose.yml
+wget https://raw.githubusercontent.com/fuxubosir/Cups-Print/master/docker-compose.yml
 ```
 
 ### 2. 配置环境变量
@@ -395,35 +391,6 @@ docker-compose logs -f cups
 
 欢迎提 Issue 和 Pull Request。开发者文档请参阅 [AGENTS.md](AGENTS.md)。
 
-## 📈 Star History
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=hanxi/cups-web&type=Date)](https://www.star-history.com/#hanxi/cups-web&Date)
-
-如果这个项目对你有帮助，欢迎点击右上角的 ⭐ **Star** 让更多人发现它！
-
-</div>
-
-## 💖 支持项目
-
-如果这个项目对你有帮助，欢迎通过以下方式支持：
-
-### ⭐ Star 项目
-
-点击右上角的 ⭐ Star 按钮，让更多人发现这个项目。
-
-### 💰 赞赏支持
-
-- [💝 爱发电](https://afdian.com/a/imhanxi) — 持续支持项目发展
-- 扫码请作者喝杯奶茶 ☕
-
-<p align="center">
-  <img src="https://i.v2ex.co/7Q03axO5l.png" alt="赞赏码" width="300">
-</p>
-
-感谢你的支持！❤️
-
 ## 📄 许可证
 
-本项目采用 MIT 许可证，详见 [LICENSE](LICENSE)。
+本项目基于 [hanxi/cups-web](https://github.com/hanxi/cups-web) 修改，采用 MIT 许可证，详见 [LICENSE](LICENSE)。

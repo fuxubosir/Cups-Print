@@ -6,7 +6,7 @@
     <div v-else class="grid grid-rows-[auto_1fr_auto] min-h-screen w-full bg-default">
       <header class="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-default bg-default">
         <div class="flex items-center gap-3 min-w-0">
-          <h1 class="text-xl font-bold shrink-0">CUPS 打印</h1>
+          <h1 class="text-xl font-bold shrink-0">CUPS PRINT</h1>
           <span v-if="session" class="text-sm text-muted truncate">{{ session.username }}</span>
         </div>
         <div class="flex items-center gap-2">
@@ -52,60 +52,18 @@
       <footer class="px-6 py-3 border-t border-default bg-default text-sm text-muted flex items-center justify-center gap-3 flex-wrap">
         <span>
           Powered by
-          <a href="https://github.com/hanxi/cups-web" target="_blank" class="text-primary hover:underline">cups-web</a>
+          <a href="https://github.com/fuxubosir/Cups-Print" target="_blank" class="text-primary hover:underline">CUPS PRINT</a>
         </span>
         <span v-if="appVersion" class="text-default/40">·</span>
         <!-- 版本号：二进制构建期由 -ldflags 注入到 main.Version，经 /api/version 返回。
              用户二进制覆盖升级后，无需登录即可在 footer 上看到当前运行的版本（Issue #26）。 -->
-        <span v-if="appVersion" class="font-mono text-xs" :title="`cups-web ${appVersion}`">
+        <span v-if="appVersion" class="font-mono text-xs" :title="`CUPS PRINT ${appVersion}`">
           {{ appVersion }}
         </span>
         <span class="text-default/40">·</span>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1 text-primary hover:underline"
-          @click="showSponsorModal = true"
-        >
-          <UIcon name="i-lucide-heart" class="w-4 h-4" />
-          <span>赞赏支持</span>
-        </button>
+        <a href="https://github.com/hanxi/cups-web" target="_blank" class="text-primary hover:underline">基于 hanxi/cups-web 修改</a>
       </footer>
     </div>
-
-    <UModal v-model:open="showSponsorModal">
-      <template #content>
-        <div class="p-6 space-y-4">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-heart" class="w-5 h-5 text-primary" />
-            <h3 class="text-lg font-semibold">赞赏支持</h3>
-          </div>
-          <p class="text-sm text-muted">
-            如果 cups-web 对你有帮助，欢迎通过以下方式支持作者持续维护 ❤️
-          </p>
-          <div class="flex flex-col items-center gap-3 py-2">
-            <img
-              src="/sponsor.png"
-              alt="赞赏码"
-              class="w-60 h-60 object-contain rounded-lg border border-default bg-white"
-              loading="lazy"
-            />
-            <div class="text-sm text-muted">扫码请作者喝杯奶茶 ☕</div>
-          </div>
-          <div class="flex flex-col sm:flex-row gap-2 sm:justify-between sm:items-center pt-2 border-t border-default">
-            <a
-              href="https://afdian.com/a/imhanxi"
-              target="_blank"
-              rel="noopener"
-              class="inline-flex items-center gap-1 text-primary hover:underline text-sm"
-            >
-              <UIcon name="i-lucide-external-link" class="w-4 h-4" />
-              爱发电主页
-            </a>
-            <UButton variant="ghost" @click="showSponsorModal = false">关闭</UButton>
-          </div>
-        </div>
-      </template>
-    </UModal>
   </UApp>
 </template>
 
@@ -119,7 +77,6 @@ const route = useRoute()
 
 const session = ref(null)
 const sessionLoaded = ref(false)
-const showSponsorModal = ref(false)
 // 二进制版本号：首次挂载时拉一次 /api/version（公开接口，不要求登录），
 // 失败时保持空字符串，footer 上的版本号节点会被 v-if 隐藏，不影响布局。
 const appVersion = ref('')

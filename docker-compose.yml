@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: hanxi/cups-web:master
+    image: fuxubosir/cups-print:custom
     user: root
     environment:
       - CUPS_HOST=cups:631
